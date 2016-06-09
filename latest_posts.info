@@ -1,0 +1,5 @@
+name = Latest Posts
+description = Module for test task.
+core = 7.x
+
+configure = admin/config/content/latest_posts

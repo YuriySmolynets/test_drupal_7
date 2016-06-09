@@ -1,0 +1,186 @@
+<?php
+
+function latest_posts_help($path, $arg) {
+  switch ($path) {
+    case "admin/help#latest_posts":
+      return '<p>' . t("Displays links to nodes created on this date") . '</p>';
+      break;
+  }
+}
+
+function latest_posts_block_info() {
+  $blocks['latest_posts'] = array(
+    'info' => t('Latest posts'),
+    'cache' => DRUPAL_CACHE_PER_ROLE,
+  );
+  return $blocks;
+}
+
+function latest_posts_contents($display){
+  $today = getdate();
+  $start_time = mktime(0, 0, 0,$today['mon'],($today['mday'] - 30), $today['year']);
+  $end_time = time();
+  
+  
+ $max_num = variable_get('latest_posts_max', 3); 
+ 
+ $max_page_num = variable_get('latest_posts_max_page', 4);
+
+  $query = new EntityFieldQuery();
+$query ->entityCondition  ('entity_type', 'node')
+	->entityCondition ('bundle', 'post')
+    ->propertyCondition('status', 1)
+    ->propertyCondition('created',  array($start_time, $end_time), 'BETWEEN')
+    ->propertyOrderBy('created', 'DESC');
+	
+	if ($display == 'block'){
+	$query->pager($max_num);
+	}
+     
+	if ($display == 'page'){
+	//set number of nodes for pager on page
+	$query->pager($max_page_num);
+	} 
+	 
+  return $query->execute();
+  
+}
+function latest_posts_block_view($delta = '') {
+  switch ($delta) {
+    case 'latest_posts':
+      $block['subject'] = t('Latest posts');
+      if (user_access('access content')) {
+
+   }
+        $result = latest_posts_contents('block');
+		$nodes = array();
+		    if (isset($result['node'])) {
+      $nids = array_keys($result['node']);
+      $nodes = node_load_multiple($nids);
+    }
+        $items = array();
+		
+        foreach ($nodes as $node) {
+          $items[] = array(
+            'data' => l($node->title, 'node/' . $node->nid) . "<br>Post date: " . date('d-m-Y', $node->created),
+          );
+        }
+
+        if (empty($items)) {
+          $block['content'] = t('No news available.');  
+        }
+        else {
+          $block['content'] = theme('item_list', array(
+            'items' => $items));
+        }
+      }
+    return $block;
+  }
+
+function latest_posts_menu() {
+  $items = array();
+  $items['latest_posts'] = array(
+        'title' => 'Latest posts',
+        'page callback' => '_latest_posts_page',
+        'access arguments' => array('access latest_posts content'),
+        'type' => MENU_NORMAL_ITEM,
+      );
+  $items['admin/config/content/latest_posts'] = array(
+    'title' => 'Latest posts',
+    'description' => 'Configuration for Latest posts module',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('latest_posts_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+function latest_posts_block_configure($delta = ''){
+    $form = array();
+                switch ($delta) {
+                case 'latest_posts':
+                               $form['latest_posts_max'] = array(
+                               '#type' => 'textfield',
+                               '#title' => t('Number of nodes'),
+                               '#default_value' => variable_get('latest_posts_max'), 
+                               '#size' => 2, 
+                               '#maxlength' => 2,
+							   '#description' => t('The maximum number of links to display in the block.'),
+							   '#required' => TRUE,
+                               );
+                break;
+    }
+    return $form;
+}
+ 
+function latest_posts_block_save($delta  = '', $edit = array()){
+    switch ($delta){
+                case 'latest_posts':
+                               variable_set('latest_posts_max' , $edit['latest_posts_max']);
+                break;
+    }
+}
+
+function latest_posts_form($form, &$form_state) {
+$form['latest_posts_max_page'] = array(
+	'#type' => 'textfield',
+    '#title' => t('Maximum number of posts on page'),
+    '#default_value' => variable_get('latest_posts_max_page', 4),
+    '#size' => 2,
+    '#maxlength' => 2,
+    '#description' => t('The maximum number of links to display on page.'),
+    '#required' => TRUE,
+  );
+
+  return system_settings_form($form);
+}
+
+function latest_posts_form_validate($form, &$form_state){
+  $max_page_num = $form_state['values']['latest_posts_max_page'];
+  if (!is_numeric($max_page_num)){
+    form_set_error('latest_posts_max_page', t('You must enter a number for the maximum number of posts to display.'));
+  }
+  elseif ($max_page_num <= 0){
+    form_set_error('latest_posts_max_page', t('Maximum number of posts to display must be positive.'));
+  }
+}
+
+function latest_posts_permission() {
+  return array(
+    'access latest_posts content' => array(
+      'title' => t('Access content for the Latest posts module'),
+    )
+  );
+} 
+
+function _latest_posts_page() {
+  $result = latest_posts_contents('page');
+  $nodes = array();
+		    if (isset($result['node'])) {
+      $nids = array_keys($result['node']);
+      $nodes = node_load_multiple($nids);
+    }
+  $items = array();
+  foreach ($nodes as $node) {
+    $items[] = array(
+    'data' => l($node->title, 'node/' . $node->nid) . "<br>Post date: " . date('d-m-Y', $node->created),
+    );
+  }
+  if (empty($items)) {
+    $page_array['latest_posts_arguments'] = array(
+      '#title' => t('Latest posts'),
+      '#markup' => t('No posts available.'),
+    );
+    return $page_array;  
+  } 
+    else {
+    $page_array['latest_posts_arguments'] = array(
+      '#title' => t('All Latest posts'),
+      '#items' => $items,  
+      '#theme' => 'item_list__latest_posts',
+    );
+	$page_array['item_pager'] = array ('#theme' => 'pager');
+    return $page_array;
+  }
+}
